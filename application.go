@@ -2,10 +2,14 @@ package discordkvs
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"github.com/bwmarrin/discordgo"
+	"github.com/ethanent/randbytes"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 type ApplicationConfigOption int
@@ -20,13 +24,41 @@ type Application struct {
 	s                        *discordgo.Session
 	id                       []byte
 	acceptDataFromOtherUsers bool
+	key                      []byte
+	block                    cipher.Block
+	aesGCM                   cipher.AEAD
 }
 
-func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOption) *Application {
+func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOption) (*Application, error) {
+	salt, err := randbytes.RandBytes(16)
+
+	if err != nil {
+		return nil, err
+	}
+
+	salt = salt[:16]
+
+	key := pbkdf2.Key([]byte(id), salt, 13000, 32, sha256.New)
+
+	block, err := aes.NewCipher(key)
+
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+
+	if err != nil {
+		return nil, err
+	}
+
 	a := &Application{
 		s:                        s,
 		id:                       []byte(id),
 		acceptDataFromOtherUsers: false,
+		key:                      key,
+		block:                    block,
+		aesGCM:                   gcm,
 	}
 
 	for _, o := range opts {
@@ -38,7 +70,7 @@ func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOp
 		}
 	}
 
-	return a
+	return a, nil
 }
 
 // Gets the KVS channel for guild, creating one if it doesn't already exist.
@@ -109,13 +141,21 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 
 	hashed := a.keyHashStr(key)
 
-	r := bytes.NewReader(value)
+	nonce, err := randbytes.RandBytes(a.aesGCM.NonceSize())
+
+	if err != nil {
+		return err
+	}
+
+	enc := a.aesGCM.Seal(nil, nonce, value, []byte{})
+
+	r := bytes.NewReader(enc)
 
 	_, err = a.s.ChannelMessageSendComplex(kvs.ID, &discordgo.MessageSend{
 		Content: hashed,
 		File: &discordgo.File{
 			Name:        "d",
-			ContentType: "kvs/encrypted",
+			ContentType: "application/octet-stream",
 			Reader:      r,
 		},
 	})
