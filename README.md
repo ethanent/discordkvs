@@ -14,7 +14,7 @@ go get github.com/ethanent/discordkvs
 - Store key-value pairs within a Discord channel in a server, rather than storing data in your own database.
 - Cleans up data periodically, based on random chance for performance.
 - Can store data larger than a Discord message by automatically switching to attachment files rather than inline text. (Higher latency, but can store larger values.)
-- Encrypt data, so if you keep your secure KVS Application ID a secret (eg. by keeping codebase private), the data should be reasonably difficult for others to access.
+- Encrypt values, so if you keep your secure KVS Application ID a secret (eg. by keeping codebase private), the data should be reasonably difficult for others to access.
     - Encryption fails early, so there should generally not be encryption errors after Application is initialized.
 - Optionally, Application may be allowed to read data from other bots / users sharing the same Application ID.
 
