@@ -12,8 +12,9 @@ const (
 )
 
 type filterDescriptor struct {
-	by       filterMessagesMethod
-	selector string
+	by              filterMessagesMethod
+	selector        string
+	requireAuthorID string
 }
 
 func (a *Application) getMessages(kvsChannel *discordgo.Channel, limit int, maxSearch int, method *filterDescriptor) ([]*discordgo.Message, error) {
@@ -54,6 +55,12 @@ func (a *Application) getMessages(kvsChannel *discordgo.Channel, limit int, maxS
 
 		for _, msg := range msgs {
 			if method.by == filterByKeyHash {
+				if method.requireAuthorID != "" {
+					if msg.Author.ID != method.requireAuthorID {
+						continue
+					}
+				}
+
 				parsed, err := parseMessageContent(msg.Content)
 
 				if err != nil {

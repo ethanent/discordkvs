@@ -3,23 +3,32 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/ethanent/discordkvs"
 	"os"
+	"os/signal"
+	"strings"
 	"time"
 )
 
 const UseGuild = "732134812499836941"
 
+var integrityTest = flag.Bool("i", false, "should bot perform integrity testing?")
+
 func main() {
+	flag.Parse()
+
 	s, err := discordgo.New("Bot " + os.Getenv("DISCORD_BOT_TOKEN"))
 
 	if err != nil {
 		panic(err)
 	}
 
-	app, err := discordkvs.NewApplication(s, "DemoApp")
+	// discordkvs.AcceptDataFromOtherUsers will allow the application to use messages
+	// from other users to get values.
+	app, err := discordkvs.NewApplication(s, "DemoApp", discordkvs.AcceptDataFromOtherUsers)
 
 	if err != nil {
 		panic(err)
@@ -39,21 +48,71 @@ func main() {
 
 	fmt.Println("KVS ID: " + c.ID)
 
-	// Test data
+	if *integrityTest {
+		// Test data
 
-	testMessageIntegrity(s, app, 100)
+		fmt.Println(app.Get(UseGuild, "testKey"))
 
-	testMessageIntegrity(s, app, 100)
+		testMessageIntegrity(s, app, 100)
 
-	testMessageIntegrity(s, app, 200)
+		testMessageIntegrity(s, app, 100)
 
-	testMessageIntegrity(s, app, 300)
+		testMessageIntegrity(s, app, 300)
 
-	testMessageIntegrity(s, app, 500)
+		testMessageIntegrity(s, app, 600)
 
-	testMessageIntegrity(s, app, 1000)
+		testMessageIntegrity(s, app, 1000)
 
-	testMessageIntegrity(s, app, 2000)
+		testMessageIntegrity(s, app, 100)
+
+		os.Exit(0)
+	}
+
+	// Run simple data storage bot
+
+	s.AddHandler(func (_ *discordgo.Session, m *discordgo.MessageCreate) {
+		d := strings.Split(m.Content, " ")
+
+		if d[0] != "kvs" {
+			return
+		}
+
+		if d[1] == "set" {
+			if len(d) < 4 {
+				s.ChannelMessageSend(m.ChannelID, "err: not enough args")
+				return
+			}
+
+			err := app.Set(m.GuildID, d[2], []byte(d[3]))
+
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, "err: " + err.Error())
+				return
+			}
+
+			s.ChannelMessageSend(m.ChannelID, ":white_check_mark:")
+		} else if d[1] == "get" {
+			if len(d) < 3 {
+				s.ChannelMessageSend(m.ChannelID, "err: not enough args")
+				return
+			}
+
+			d, err := app.Get(m.GuildID, d[2])
+
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, "err: " + err.Error())
+				return
+			}
+
+			s.ChannelMessageSend(m.ChannelID, ":white_check_mark: " + string(d))
+		}
+	})
+
+	f := make(chan os.Signal)
+
+	signal.Notify(f, os.Interrupt)
+
+	<- f
 }
 
 func testMessageIntegrity(s *discordgo.Session, a *discordkvs.Application, dataSize int) {

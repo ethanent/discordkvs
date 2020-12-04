@@ -13,11 +13,11 @@ import (
 	"io/ioutil"
 )
 
-type ApplicationConfigOption int
+type ApplicationConfigOption func (*Application)
 
-const (
-	AcceptDataFromOtherUsers ApplicationConfigOption = iota
-)
+func AcceptDataFromOtherUsers(a *Application) {
+	a.acceptDataFromOtherUsers = true
+}
 
 var ErrNoExist = errors.New("pair does not exist")
 
@@ -33,17 +33,10 @@ type Application struct {
 }
 
 func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOption) (*Application, error) {
-	salt := make([]byte, 16)
-
-	_, err := rand.Read(salt)
-
-	if err != nil {
-		return nil, err
-	}
-
-	salt = salt[:16]
-
-	key := pbkdf2.Key([]byte(id), salt, 13000, 32, sha256.New)
+	// The same salt is used each time because the key output should be
+	// deterministic. (This is so that the consumer can treat the Application ID like
+	// a password if they wish.
+	key := pbkdf2.Key([]byte(id), []byte{52, 62, 10, 123, 240, 138, 71, 183}, 13000, 32, sha256.New)
 
 	block, err := aes.NewCipher(key)
 
@@ -67,12 +60,7 @@ func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOp
 	}
 
 	for _, o := range opts {
-		switch o {
-		case AcceptDataFromOtherUsers:
-			a.acceptDataFromOtherUsers = true
-		default:
-			panic(errors.New("unknown ApplicationConfigOption"))
-		}
+		o(a)
 	}
 
 	return a, nil
@@ -144,7 +132,7 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 		return err
 	}
 
-	hashed := a.keyHashStr(key)
+	hashedKey := a.keyHashStr(key)
 
 	nonce := make([]byte, a.aesGCM.NonceSize())
 
@@ -160,12 +148,12 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 
 	var dataLoc = dataInAttachment
 
-	if len(enc)*2+len(hashed)+3 < 1999 {
+	if len(enc)*2+len(hashedKey)+3 < 1999 {
 		dataLoc = dataInContent
 	}
 
 	msgContent := serializeMessageContent(&messageContentMetadata{
-		KeyHashStr: hashed,
+		KeyHashStr: hashedKey,
 		DataLoc:    dataLoc,
 		Nonce:      nonce,
 		Data:       enc,
@@ -181,7 +169,7 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 		addedMessage, err = a.s.ChannelMessageSendComplex(kvs.ID, &discordgo.MessageSend{
 			Content: msgContent,
 			File: &discordgo.File{
-				Name:        hex.EncodeToString(nonce),
+				Name:        "d",
 				ContentType: "application/octet-stream",
 				Reader:      r,
 			},
@@ -202,13 +190,11 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 	if nonce[0] < 255/10 {
 		old, err := a.getMessages(kvs, -1, 100, &filterDescriptor{
 			by:       filterByKeyHash,
-			selector: hashed,
+			selector: hashedKey,
 		})
 
 		// Let's clear if no error. If error, let's ignore it. Not the end of the world.
 		if err == nil {
-			// fmt.Println(old)
-
 			mids := make([]string, 0, len(old))
 
 			for _, m := range old {
@@ -238,9 +224,16 @@ func (a *Application) Get(guildID string, key string) ([]byte, error) {
 
 	keyHash := a.keyHashStr(key)
 
+	requireAuthorID := ""
+
+	if !a.acceptDataFromOtherUsers {
+		requireAuthorID = a.s.State.User.ID
+	}
+
 	res, err := a.getMessages(kvsChannel, 1, -1, &filterDescriptor{
-		by:       filterByKeyHash,
-		selector: keyHash,
+		by:              filterByKeyHash,
+		selector:        keyHash,
+		requireAuthorID: requireAuthorID,
 	})
 
 	if err != nil {
