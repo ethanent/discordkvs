@@ -83,28 +83,48 @@ func main() {
 				return
 			}
 
+			start := time.Now()
 			err := app.Set(m.GuildID, d[2], []byte(d[3]))
+			end := time.Now()
 
 			if err != nil {
 				s.ChannelMessageSend(m.ChannelID, "err: " + err.Error())
 				return
 			}
 
-			s.ChannelMessageSend(m.ChannelID, ":white_check_mark:")
+			s.ChannelMessageSend(m.ChannelID, ":white_check_mark: " + end.Sub(start).String())
 		} else if d[1] == "get" {
 			if len(d) < 3 {
 				s.ChannelMessageSend(m.ChannelID, "err: not enough args")
 				return
 			}
 
+			start := time.Now()
 			d, err := app.Get(m.GuildID, d[2])
+			end := time.Now()
 
 			if err != nil {
 				s.ChannelMessageSend(m.ChannelID, "err: " + err.Error())
 				return
 			}
 
-			s.ChannelMessageSend(m.ChannelID, ":white_check_mark: " + string(d))
+			s.ChannelMessageSend(m.ChannelID, ":white_check_mark: " + string(d) + " " + end.Sub(start).String())
+		} else if d[1] == "del" {
+			if len(d) < 3 {
+				s.ChannelMessageSend(m.ChannelID, "err: not enough args")
+				return
+			}
+
+			start := time.Now()
+			err := app.Del(m.GuildID, d[2])
+			end := time.Now()
+
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, "err: " + err.Error())
+				return
+			}
+
+			s.ChannelMessageSend(m.ChannelID, ":white_check_mark: " + end.Sub(start).String())
 		}
 	})
 

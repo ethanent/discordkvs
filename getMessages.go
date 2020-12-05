@@ -17,7 +17,7 @@ type filterDescriptor struct {
 	requireAuthorID string
 }
 
-func (a *Application) getMessages(kvsChannel *discordgo.Channel, limit int, maxSearch int, method *filterDescriptor) ([]*discordgo.Message, error) {
+func (a *Application) getMessages(kvsChannelID string, limit int, maxSearch int, method *filterDescriptor) ([]*discordgo.Message, error) {
 	useCap := limit
 
 	if useCap == -1 {
@@ -34,9 +34,9 @@ func (a *Application) getMessages(kvsChannel *discordgo.Channel, limit int, maxS
 		var err error
 
 		if earliestMsg != nil {
-			msgs, err = a.s.ChannelMessages(kvsChannel.ID, 100, earliestMsg.ID, "", "")
+			msgs, err = a.s.ChannelMessages(kvsChannelID, 100, earliestMsg.ID, "", "")
 		} else {
-			msgs, err = a.s.ChannelMessages(kvsChannel.ID, 100, "", "", "")
+			msgs, err = a.s.ChannelMessages(kvsChannelID, 100, "", "", "")
 		}
 
 		if err != nil {
