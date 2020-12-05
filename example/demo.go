@@ -40,15 +40,15 @@ func main() {
 
 	fmt.Println("OPEN")
 
-	c, err := app.GetKVSChannel(UseGuild)
-
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("KVS ID: " + c.ID)
-
 	if *integrityTest {
+		kvsChannelID, err := app.GetKVSChannelID(UseGuild)
+
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println("KVS ID: " + kvsChannelID)
+
 		// Test data
 
 		fmt.Println(app.Get(UseGuild, "testKey"))

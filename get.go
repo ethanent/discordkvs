@@ -7,7 +7,7 @@ import (
 
 // Get gets the corresponding value given a key.
 func (a *Application) Get(guildID string, key string) ([]byte, error) {
-	kvsChannel, err := a.GetKVSChannel(guildID)
+	kvsChannelID, err := a.GetKVSChannelID(guildID)
 
 	if err != nil {
 		return nil, err
@@ -21,13 +21,16 @@ func (a *Application) Get(guildID string, key string) ([]byte, error) {
 		requireAuthorID = a.s.State.User.ID
 	}
 
-	res, err := a.getMessages(kvsChannel.ID, 1, -1, &filterDescriptor{
+	res, err := a.getMessages(kvsChannelID, 1, -1, &filterDescriptor{
 		by:              filterByKeyHash,
 		selector:        keyHash,
 		requireAuthorID: requireAuthorID,
 	})
 
 	if err != nil {
+		// Eliminate KVS channel ID from cache, in case it doesn't exist anymore.
+		delete(kvsChannelIDCache, guildID)
+
 		return nil, err
 	}
 

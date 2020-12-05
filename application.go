@@ -66,21 +66,13 @@ func NewApplication(s *discordgo.Session, id string, opts ...ApplicationConfigOp
 }
 
 // Gets the KVS channel for guild, creating one if it doesn't already exist.
-func (a *Application) GetKVSChannel(guildID string) (*discordgo.Channel, error) {
+func (a *Application) GetKVSChannelID(guildID string) (string, error) {
 	// First, check cache
 
 	cachedID, ok := kvsChannelIDCache[guildID]
 
 	if ok {
-		fetchedChannel, err := a.s.Channel(cachedID)
-
-		if err != nil {
-			// Purge channel from cache and continue. Channel fetch errored.
-
-			delete(kvsChannelIDCache, guildID)
-		} else {
-			return fetchedChannel, nil
-		}
+		return cachedID, nil
 	}
 
 	// Not cached, locate channel.
@@ -88,7 +80,7 @@ func (a *Application) GetKVSChannel(guildID string) (*discordgo.Channel, error) 
 	guildChannels, err := a.s.GuildChannels(guildID)
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	var kvsChannel *discordgo.Channel
@@ -106,13 +98,13 @@ func (a *Application) GetKVSChannel(guildID string) (*discordgo.Channel, error) 
 
 		kvsChannelIDCache[guildID] = kvsChannel.ID
 
-		return kvsChannel, nil
+		return kvsChannel.ID, nil
 	}
 
 	guild, err := a.s.Guild(guildID)
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	createdChannel, err := a.s.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
@@ -132,7 +124,7 @@ func (a *Application) GetKVSChannel(guildID string) (*discordgo.Channel, error) 
 	})
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	a.s.ChannelMessageSend(createdChannel.ID, "Hello there, <@"+guild.OwnerID+">. This is an automated channel for bots to use for storing data.\n**Please ensure that bots are able to access this channel!**\nIf the channel is deleted, you may lose bot data such as configurations.\n\nTo avoid notifications from this channel, you may mute it and hide it from non-bot members.\nFor more information, see the repository: https://github.com/ethanent/discordkvs")
@@ -141,7 +133,7 @@ func (a *Application) GetKVSChannel(guildID string) (*discordgo.Channel, error) 
 
 	kvsChannelIDCache[guildID] = createdChannel.ID
 
-	return createdChannel, nil
+	return createdChannel.ID, nil
 }
 
 func (a *Application) keyHashStr(key string) string {

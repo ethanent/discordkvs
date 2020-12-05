@@ -15,7 +15,7 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 		return ErrEmptyKey
 	}
 
-	kvs, err := a.GetKVSChannel(guildID)
+	kvsChannelID, err := a.GetKVSChannelID(guildID)
 
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 	if dataLoc == dataInAttachment {
 		r := bytes.NewReader(enc)
 
-		addedMessage, err = a.s.ChannelMessageSendComplex(kvs.ID, &discordgo.MessageSend{
+		addedMessage, err = a.s.ChannelMessageSendComplex(kvsChannelID, &discordgo.MessageSend{
 			Content: msgContent,
 			File: &discordgo.File{
 				Name:        "d",
@@ -63,21 +63,24 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 				Reader:      r,
 			},
 		})
-
-		if err != nil {
-			return err
-		}
 	} else if dataLoc == dataInContent {
-		addedMessage, err = a.s.ChannelMessageSendComplex(kvs.ID, &discordgo.MessageSend{
+		addedMessage, err = a.s.ChannelMessageSendComplex(kvsChannelID, &discordgo.MessageSend{
 			Content: msgContent,
 		})
+	}
+
+	if err != nil {
+		// Eliminate KVS channel ID from cache, in case it doesn't exist anymore.
+		delete(kvsChannelIDCache, guildID)
+
+		return err
 	}
 
 	// Clear old values, if 1/10 chance met
 	// The chance is for performance. Cleaning up is slow and probably affects ratelimiting.
 
 	if nonce[0] < 255/10 {
-		old, err := a.getMessages(kvs.ID, -1, 100, &filterDescriptor{
+		old, err := a.getMessages(kvsChannelID, -1, 100, &filterDescriptor{
 			by:       filterByKeyHash,
 			selector: hashedKey,
 		})
@@ -94,7 +97,7 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 				mids = append(mids, m)
 			}
 
-			if err := bulkDelete(a.s, kvs.ID, mids); err != nil {
+			if err := bulkDelete(a.s, kvsChannelID, mids); err != nil {
 				// Ignore error, but hopefully this doesn't happen.
 				// Channel will get crowded if bot can't delete old values.
 			}
@@ -106,22 +109,25 @@ func (a *Application) Set(guildID string, key string, value []byte) error {
 
 // Del deletes a key-value pair.
 func (a *Application) Del(guildID string, key string) error {
-	kvsChannel, err := a.GetKVSChannel(guildID)
+	kvsChannelID, err := a.GetKVSChannelID(guildID)
 
 	if err != nil {
 		return err
 	}
 
-	res, err := a.getMessages(kvsChannel.ID, -1, -1, &filterDescriptor{
+	res, err := a.getMessages(kvsChannelID, -1, -1, &filterDescriptor{
 		by:       filterByKeyHash,
 		selector: a.keyHashStr(key),
 	})
 
 	if err != nil {
+		// Eliminate KVS channel ID from cache, in case it doesn't exist anymore.
+		delete(kvsChannelIDCache, guildID)
+
 		return err
 	}
 
-	err = bulkDelete(a.s, kvsChannel.ID, res)
+	err = bulkDelete(a.s, kvsChannelID, res)
 
 	return err
 }
